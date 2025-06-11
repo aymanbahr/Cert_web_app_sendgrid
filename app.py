@@ -3,12 +3,11 @@ import pandas as pd
 import fitz  # PyMuPDF
 import os
 import re
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Attachment, FileContent, FileName, FileType, Disposition
-import base64
+import yagmail
 
-st.set_page_config(page_title="Certificate Sender (SendGrid API)", layout="centered")
-st.title("Certificate Sender & Cleaner with SendGrid API")
+st.set_page_config(page_title="Certificate Sender (SendGrid)", layout="centered")
+
+st.title("Volaris Certificate Cleaner & Sender")
 
 uploaded_excel = st.file_uploader("Upload Attendee Excel (.xlsx)", type=["xlsx"])
 uploaded_pdf = st.file_uploader("Upload Certificate Template (.pdf)", type=["pdf"])
@@ -35,35 +34,11 @@ def generate_certificate(name, template_bytes, output_path):
     doc = fitz.open(stream=template_bytes, filetype="pdf")
     for page in doc:
         for inst in page.search_for("<fullName>"):
-            page.add_redact_annot(inst, fill=(1, 1, 1))
-            page.insert_textbox(inst, name, fontsize=24, color=(0, 0, 0), align=1)
+            page.insert_text(inst[:2], name, fontsize=24, color=(0, 0, 0))
+            page.add_redact_annot(inst)
+        page.apply_redactions()
     doc.save(output_path)
     doc.close()
-
-def send_email_via_sendgrid(api_key, from_email, to_email, subject, html_content, file_path):
-    message = Mail(
-        from_email=from_email,
-        to_emails=to_email,
-        subject=subject,
-        html_content=html_content
-    )
-    with open(file_path, 'rb') as f:
-        data = f.read()
-        encoded = base64.b64encode(data).decode()
-        attachedFile = Attachment(
-            FileContent(encoded),
-            FileName(os.path.basename(file_path)),
-            FileType('application/pdf'),
-            Disposition('attachment')
-        )
-        message.attachment = attachedFile
-
-    try:
-        sg = SendGridAPIClient(api_key)
-        response = sg.send(message)
-        return response.status_code
-    except Exception as e:
-        return f"Error: {e}"
 
 if uploaded_excel and uploaded_pdf:
     df = pd.read_excel(uploaded_excel)
@@ -79,29 +54,29 @@ if uploaded_excel and uploaded_pdf:
     else:
         st.success("All data looks good!")
 
-    button_clicked = st.button("Start Sending Certificates")
+    if st.button("Start Sending Certificates") and sendgrid_api_key and from_email:
+        yag = yagmail.SMTP(
+            user="apikey",
+            password=sendgrid_api_key,
+            host="smtp.sendgrid.net",
+            port=587,
+            smtp_starttls=True
+        )
 
-    if button_clicked:
-        if not sendgrid_api_key or not from_email:
-            st.error("Please enter your SendGrid API key and sender email.")
-        else:
-            valid_df = df[df["Valid Name"] & df["Valid Email"]]
-            os.makedirs("output", exist_ok=True)
-            for _, row in valid_df.iterrows():
-                name = row["Name"]
-                email = row["Email"]
-                first_name = name.split()[0]
-                cert_path = f"output/{name}.pdf"
-                generate_certificate(name, uploaded_pdf.read(), cert_path)
-
-                html_message = email_body.replace("{first_name}", first_name).replace("\n", "<br>")
-                status = send_email_via_sendgrid(
-                    api_key=sendgrid_api_key,
-                    from_email=from_email,
-                    to_email=email,
-                    subject=email_subject.replace("{first_name}", first_name),
-                    html_content=html_message,
-                    file_path=cert_path
-                )
-                st.write(f"{name} ({email}) → Status: {status}")
-            st.success("All certificates sent!")
+        valid_df = df[df["Valid Name"] & df["Valid Email"]]
+        os.makedirs("output", exist_ok=True)
+        for _, row in valid_df.iterrows():
+            name = row["Name"]
+            email = row["Email"]
+            first_name = name.split()[0]
+            cert_path = f"output/{name}.pdf"
+            generate_certificate(name, uploaded_pdf.read(), cert_path)
+            yag.send(
+                to=email,
+                subject=email_subject.format(first_name=first_name),
+                contents=email_body.format(first_name=first_name),
+                attachments=cert_path,
+                headers={"From": from_email}
+            )
+            st.write(f"Sent to {name} ({email})")
+        st.success("All certificates sent!")
