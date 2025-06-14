@@ -1,5 +1,5 @@
+sendgrid
 streamlit
 pandas
 openpyxl
 PyMuPDF
-sendgrid
