@@ -7,7 +7,7 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Attachment, FileContent, FileName, FileType, Disposition
 import base64
 
-st.set_page_config(page_title="Volaris Data Cleaner & Certificate Sender with SendGrid", layout="centered")
+st.set_page_config(page_title="Certificate Sender (SendGrid)", layout="centered")
 
 # Login credentials
 LOGIN_EMAIL = st.secrets.get("LOGIN_EMAIL")
@@ -124,3 +124,28 @@ if uploaded_excel and uploaded_pdf:
             except Exception as e:
                 st.error(f"Failed to send to {name} ({email}): {e}")
         st.success("All certificates sent!")
+
+
+# 📥 Download All Certificates
+st.markdown("---")
+if os.path.isdir("output"):
+    import zipfile
+    from io import BytesIO
+
+    def zip_output_folder():
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+            for root, _, files in os.walk("output"):
+                for file in files:
+                    zipf.write(os.path.join(root, file), arcname=file)
+        zip_buffer.seek(0)
+        return zip_buffer
+
+    zip_data = zip_output_folder()
+    st.download_button(
+        label="📦 Download All Certificates (ZIP)",
+        data=zip_data,
+        file_name="All_Certificates.zip",
+        mime="application/zip"
+    )
+
