@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# Streamlit certificate sender app using SendGrid API
-=======
 import streamlit as st
 import pandas as pd
 import fitz  # PyMuPDF
@@ -10,7 +7,7 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Attachment, FileContent, FileName, FileType, Disposition
 import base64
 
-st.set_page_config(page_title="Certificate Sender (SendGrid)", layout="centered")
+st.set_page_config(page_title="Volaris Data Cleaner & Certificate Sender with SendGrid", layout="centered")
 
 # Login credentials
 LOGIN_EMAIL = st.secrets.get("LOGIN_EMAIL")
@@ -127,5 +124,3 @@ if uploaded_excel and uploaded_pdf:
             except Exception as e:
                 st.error(f"Failed to send to {name} ({email}): {e}")
         st.success("All certificates sent!")
-
->>>>>>> 5baea90bf177a96cdb84b2dd71c73d3e833a55fe
