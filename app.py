@@ -54,9 +54,11 @@ email_subject = st.text_input("Email Subject", value=f"Your Attendance Certifica
 email_body = st.text_area("Email Body (use {first_name})", value=f"""Dear Dr {{first_name}},
 
 Thank you for attending {event_name}.  
+
 Your certificate is attached.
 
 Best Regards,  
+
 Volaris Team on behalf of {client_company}""")
 
 def is_valid_name(name):
