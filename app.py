@@ -50,8 +50,8 @@ client_company = st.text_input("Client Company")
 if not event_name or not event_date or not client_company:
     st.warning('Please fill in all required fields: Event Name, Event Date, and Client Company.')
     st.stop()
-email_subject = st.text_input("Email Subject", value="Your Attendance Certificate")
-email_body = st.text_area("Email Body (use {first_name})", value="""Dear Dr {first_name},  
+email_subject = st.text_input("Email Subject", value=f"Your Attendance Certificate {event_name}_{event_date}")
+email_body = st.text_area("Email Body (use {first_name})", value=f"""Dear Dr {{first_name}},
 
 Thank you for attending {event_name}.  
 Your certificate is attached.
