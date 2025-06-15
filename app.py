@@ -41,8 +41,23 @@ if not sendgrid_api_key or not from_email:
     st.error("SendGrid API Key or Sender Email not set in environment variables.")
     st.stop()
 
+event_name = st.text_input("Event Name")
+event_date = st.text_input("Event Date")
+client_company = st.text_input("Client Company")
+
+
+# Ensure required fields are filled
+if not event_name or not event_date or not client_company:
+    st.warning('Please fill in all required fields: Event Name, Event Date, and Client Company.')
+    st.stop()
 email_subject = st.text_input("Email Subject", value="Your Attendance Certificate")
-email_body = st.text_area("Email Body (use {first_name})", value="Dear {first_name},\n\nThank you for attending.\nYour certificate is attached.")
+email_body = st.text_area("Email Body (use {first_name})", value="""Dear Dr {first_name},  
+
+Thank you for attending {event_name}.  
+Your certificate is attached.
+
+Best Regards,  
+Volaris Team on behalf of {client_company}""")
 
 def is_valid_name(name):
     bad_words = ['correct', 'yes', 'no', 'test', 'none', 'n/a', '123', 'nil']
@@ -148,4 +163,3 @@ if os.path.isdir("output"):
         file_name="All_Certificates.zip",
         mime="application/zip"
     )
-
