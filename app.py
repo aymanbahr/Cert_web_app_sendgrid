@@ -10,8 +10,8 @@ import base64
 st.set_page_config(page_title="Certificate Sender (SendGrid)", layout="centered")
 
 # Login credentials
-LOGIN_EMAIL = "Marketing@volaris-global.com"
-LOGIN_PASSWORD = "CER@VoL#20&GO"  # Change this to your desired password
+LOGIN_EMAIL = st.secrets.get("LOGIN_EMAIL")
+LOGIN_PASSWORD = st.secrets.get("LOGIN_PASSWORD")  # Change this to your desired password
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -33,18 +33,33 @@ st.title("Volaris Certificate Cleaner & Sender")
 
 uploaded_excel = st.file_uploader("Upload Attendee Excel (.xlsx)", type=["xlsx"])
 uploaded_pdf = st.file_uploader("Upload Certificate Template (.pdf)", type=["pdf"])
-# Remove font upload, keep only color picker
-name_color_hex = st.color_picker("Pick a color for the name", "#000000")
 
-sendgrid_api_key = "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"
-from_email = "ahmed.mahmoud@volaris-global.com"
+sendgrid_api_key = st.secrets.get("SENDGRID_API_KEY")
+from_email = st.secrets.get("FROM_EMAIL")
 
 if not sendgrid_api_key or not from_email:
     st.error("SendGrid API Key or Sender Email not set in environment variables.")
     st.stop()
 
-email_subject = st.text_input("Email Subject", value="Your Attendance Certificate")
-email_body = st.text_area("Email Body (use {first_name})", value="Dear {first_name},\n\nThank you for attending.\nYour certificate is attached.")
+event_name = st.text_input("Event Name")
+event_date = st.text_input("Event Date")
+client_company = st.text_input("Client Company")
+
+
+# Ensure required fields are filled
+if not event_name or not event_date or not client_company:
+    st.warning('Please fill in all required fields: Event Name, Event Date, and Client Company.')
+    st.stop()
+email_subject = st.text_input("Email Subject", value=f"Your Attendance Certificate {event_name}_{event_date}")
+email_body = st.text_area("Email Body (use {first_name})", value=f"""Dear Dr {{first_name}},
+
+Thank you for attending {event_name}.  
+
+Your certificate is attached.
+
+Best Regards,  
+
+Volaris Team on behalf of {client_company}""")
 
 def is_valid_name(name):
     bad_words = ['correct', 'yes', 'no', 'test', 'none', 'n/a', '123', 'nil']
@@ -59,25 +74,22 @@ def is_valid_email(email):
     regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
     return bool(re.match(regex, email.strip()))
 
-def hex_to_rgb(hex_color):
-    hex_color = hex_color.lstrip('#')
-    return tuple(int(hex_color[i:i+2], 16)/255 for i in (0, 2, 4))
-
-def generate_certificate(name, template_bytes, output_path, name_color=(0, 0, 0)):
+def generate_certificate(name, template_bytes, output_path):
     doc = fitz.open(stream=template_bytes, filetype="pdf")
     for page in doc:
         for inst in page.search_for("<fullName>"):
             rect = fitz.Rect(inst)
             font_size = 24
+            # Calculate the width of the name
             name_width = fitz.get_text_length(name, fontsize=font_size)
+            # Center the name in the placeholder rectangle
             name_x = rect.x0 + (rect.width - name_width) / 2
-            name_y = rect.y0 + rect.height / 2 + font_size / 2
-            page.insert_text(
-                (name_x, name_y),
-                name,
-                fontsize=font_size,
-                color=name_color
-            )
+            name_y = rect.y0 + rect.height / 2 + font_size / 2  # Vertically center
+            # Redact the placeholder
+            page.add_redact_annot(rect)
+            page.apply_redactions()
+            # Insert the name
+            page.insert_text((name_x, name_y), name, fontsize=font_size, color=(0, 0, 0))
     doc.save(output_path)
     doc.close()
 
@@ -99,13 +111,12 @@ if uploaded_excel and uploaded_pdf:
     if st.button("Start Sending Certificates") and sendgrid_api_key and from_email:
         valid_df = df[df["Valid Name"] & df["Valid Email"]]
         os.makedirs("output", exist_ok=True)
-        name_color = hex_to_rgb(name_color_hex)
         for _, row in valid_df.iterrows():
             name = row["Name"]
             email = row["Email"]
             first_name = name.split()[0]
             cert_path = f"output/{name}.pdf"
-            generate_certificate(name, template_bytes, cert_path, name_color=name_color)
+            generate_certificate(name, template_bytes, cert_path)
             # Read and encode PDF
             with open(cert_path, "rb") as f:
                 data = f.read()
@@ -130,3 +141,27 @@ if uploaded_excel and uploaded_pdf:
             except Exception as e:
                 st.error(f"Failed to send to {name} ({email}): {e}")
         st.success("All certificates sent!")
+
+
+# 📥 Download All Certificates
+st.markdown("---")
+if os.path.isdir("output"):
+    import zipfile
+    from io import BytesIO
+
+    def zip_output_folder():
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+            for root, _, files in os.walk("output"):
+                for file in files:
+                    zipf.write(os.path.join(root, file), arcname=file)
+        zip_buffer.seek(0)
+        return zip_buffer
+
+    zip_data = zip_output_folder()
+    st.download_button(
+        label="📦 Download All Certificates (ZIP)",
+        data=zip_data,
+        file_name="All_Certificates.zip",
+        mime="application/zip"
+    )
