@@ -82,7 +82,7 @@ def is_valid_email(email):
 
 # Add color picker and font size selection for the name
 name_color_hex = st.color_picker("Pick a color for the name", "#000000")
-font_size = st.slider("Font size for the name", min_value=10, max_value=60, value=24)
+font_size = st.slider("Font size for the name", min_value=10, max_value=120, value=24)
 
 def hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip('#')
@@ -93,6 +93,8 @@ def generate_certificate(name, template_bytes, output_path, name_color=(0, 0, 0)
     for page in doc:
         for inst in page.search_for("<fullName>"):
             rect = fitz.Rect(inst)
+            # Draw a debug rectangle to visualize the placeholder area
+            page.draw_rect(rect, color=(1, 0, 0), width=1)
             name_width = fitz.get_text_length(name, fontsize=font_size)
             name_x = rect.x0 + (rect.width - name_width) / 2
             name_y = rect.y0 + rect.height / 2 + font_size / 2
