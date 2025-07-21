@@ -9,9 +9,17 @@ import base64
 
 st.set_page_config(page_title="Certificate Sender (SendGrid)", layout="centered")
 
-# Login credentials
-LOGIN_EMAIL = st.secrets.get("LOGIN_EMAIL")
-LOGIN_PASSWORD = st.secrets.get("LOGIN_PASSWORD")  # Change this to your desired password
+# Login credentials with fallback for local testing
+try:
+    LOGIN_EMAIL = st.secrets["LOGIN_EMAIL"]
+    LOGIN_PASSWORD = st.secrets["LOGIN_PASSWORD"]
+    sendgrid_api_key = st.secrets["SENDGRID_API_KEY"]
+    from_email = st.secrets["FROM_EMAIL"]
+except Exception:
+    LOGIN_EMAIL = "Marketing@volaris-global.com"
+    LOGIN_PASSWORD = "CER@VoL#20&GO"
+    sendgrid_api_key = "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"
+    from_email = "ahmed.mahmoud@volaris-global.com"
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -34,8 +42,6 @@ st.title("Volaris Certificate Cleaner & Sender")
 uploaded_excel = st.file_uploader("Upload Attendee Excel (.xlsx)", type=["xlsx"])
 uploaded_pdf = st.file_uploader("Upload Certificate Template (.pdf)", type=["pdf"])
 
-sendgrid_api_key = st.secrets.get("SENDGRID_API_KEY")
-from_email = st.secrets.get("FROM_EMAIL")
 
 if not sendgrid_api_key or not from_email:
     st.error("SendGrid API Key or Sender Email not set in environment variables.")
@@ -74,22 +80,28 @@ def is_valid_email(email):
     regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
     return bool(re.match(regex, email.strip()))
 
-def generate_certificate(name, template_bytes, output_path):
+# Add color picker and font size selection for the name
+name_color_hex = st.color_picker("Pick a color for the name", "#000000")
+font_size = st.slider("Font size for the name", min_value=10, max_value=60, value=24)
+
+def hex_to_rgb(hex_color):
+    hex_color = hex_color.lstrip('#')
+    return tuple(int(hex_color[i:i+2], 16)/255 for i in (0, 2, 4))
+
+def generate_certificate(name, template_bytes, output_path, name_color=(0, 0, 0), font_size=24):
     doc = fitz.open(stream=template_bytes, filetype="pdf")
     for page in doc:
         for inst in page.search_for("<fullName>"):
             rect = fitz.Rect(inst)
-            font_size = 24
-            # Calculate the width of the name
             name_width = fitz.get_text_length(name, fontsize=font_size)
-            # Center the name in the placeholder rectangle
             name_x = rect.x0 + (rect.width - name_width) / 2
-            name_y = rect.y0 + rect.height / 2 + font_size / 2  # Vertically center
-            # Redact the placeholder
-            page.add_redact_annot(rect)
-            page.apply_redactions()
-            # Insert the name
-            page.insert_text((name_x, name_y), name, fontsize=font_size, color=(0, 0, 0))
+            name_y = rect.y0 + rect.height / 2 + font_size / 2
+            page.insert_text(
+                (name_x, name_y),
+                name,
+                fontsize=font_size,
+                color=name_color
+            )
     doc.save(output_path)
     doc.close()
 
@@ -111,12 +123,13 @@ if uploaded_excel and uploaded_pdf:
     if st.button("Start Sending Certificates") and sendgrid_api_key and from_email:
         valid_df = df[df["Valid Name"] & df["Valid Email"]]
         os.makedirs("output", exist_ok=True)
+        name_color = hex_to_rgb(name_color_hex)
         for _, row in valid_df.iterrows():
             name = row["Name"]
             email = row["Email"]
             first_name = name.split()[0]
             cert_path = f"output/{name}.pdf"
-            generate_certificate(name, template_bytes, cert_path)
+            generate_certificate(name, template_bytes, cert_path, name_color=name_color, font_size=font_size)
             # Read and encode PDF
             with open(cert_path, "rb") as f:
                 data = f.read()
