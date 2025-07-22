@@ -82,30 +82,112 @@ def is_valid_email(email):
 
 # Add color picker and font size selection for the name
 name_color_hex = st.color_picker("Pick a color for the name", "#000000")
-font_size = st.slider("Font size for the name", min_value=10, max_value=120, value=24)
+font_size = st.slider("Font size for the name", min_value=10, max_value=240, value=120)
+
+# Remove font family selection, always use uploaded font if provided, else use helv
+uploaded_font = st.file_uploader("Upload a custom font (.ttf) for the name (optional)", type=["ttf"])
+fontfile = None
+if uploaded_font is not None:
+    fontfile = "custom_font.ttf"
+    with open(fontfile, "wb") as f:
+        f.write(uploaded_font.read())
+default_fontname = "helv"  # Must be exactly this, with a capital B
+# Extra robustness: force correct case
+if default_fontname.lower() == "helv":
+    default_fontname = "helv"
+
+# Custom font upload (Google Fonts or any TTF)
+# Font family selection (case-sensitive for PyMuPDF)
+font_options = [
+    ("Helvetica", "helv"),
+    ("Helvetica Bold", "helv"),
+    ("Helvetica Italic", "helvI"),
+    ("Helvetica Bold Italic", "helvI"),
+    ("Times", "times"),
+    ("Times Bold", "timesB"),
+    ("Times Italic", "timesI"),
+    ("Times Bold Italic", "timesBI"),
+    ("Courier", "cour"),
+    ("Courier Bold", "courB"),
+    ("Courier Italic", "courI"),
+    ("Courier Bold Italic", "courBI"),
+]
+font_display = [f[0] for f in font_options]
+font_map = {f[0]: f[1] for f in font_options}  # No lowercasing
+# selected_font_display = st.selectbox("Font family for the name", font_display, index=1)
+# selected_font = font_map[selected_font_display]
+# Fix for common case errors
+font_case_map = {
+    "helv": "helv", "helvi": "helvI", "helvi": "helvI",
+    "timesb": "timesB", "timesi": "timesI", "timesbi": "timesBI",
+    "courb": "courB", "couri": "courI", "courbi": "courBI"
+}
+# selected_font = font_case_map.get(selected_font, selected_font)
+
+# Read uploaded PDF only once and reuse bytes using session_state
+if uploaded_pdf and "template_bytes" not in st.session_state:
+    st.session_state["template_bytes"] = uploaded_pdf.read()
+template_bytes = st.session_state.get("template_bytes", None)
+
+if template_bytes:
+    import fitz
+    doc = fitz.open(stream=template_bytes, filetype="pdf")
+    page = doc[0]
+    page_width = page.rect.width
+    # Centered horizontally, 400 from top, height 60, width 60% of page
+    rect_width = int(page_width * 0.6)
+    x0_default = int((page_width - rect_width) / 2)
+    x1_default = int(x0_default + rect_width)
+    y0_default = 820
+    y1_default = y0_default + 60
+    doc.close()
+else:
+    x0_default = 200
+    x1_default = 1000
+    y0_default = 400
+    y1_default = 460
+
+# Manual placement sliders with calculated defaults
+st.subheader("Manual Name Placement (if needed)")
+x0 = st.slider("X (left)", 0, 1200, x0_default)
+y0 = st.slider("Y (top)", 0, 800, y0_default)
+x1 = st.slider("X (right)", 0, 1200, x1_default)
+y1 = st.slider("Y (bottom)", 0, 800, y1_default)
+default_rect = (x0, y0, x1, y1)
 
 def hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip('#')
     return tuple(int(hex_color[i:i+2], 16)/255 for i in (0, 2, 4))
 
-def generate_certificate(name, template_bytes, output_path, name_color=(0, 0, 0), font_size=24):
+def generate_certificate(name, template_bytes, output_path, name_color=(0, 0, 0), font_size=60, default_rect=None, fontname="helv", fontfile=None):
     doc = fitz.open(stream=template_bytes, filetype="pdf")
     for page in doc:
+        found = False
         for inst in page.search_for("<fullName>"):
             rect = fitz.Rect(inst)
-            # Draw a debug rectangle to visualize the placeholder area
-            page.draw_rect(rect, color=(1, 0, 0), width=1)
-            name_width = fitz.get_text_length(name, fontsize=font_size)
+            found = True
+            break
+        if not found and default_rect:
+            rect = fitz.Rect(*default_rect)
+        if found or default_rect:
+            if fontfile:
+                name_width = fitz.get_text_length(name, fontsize=font_size, fontfile=fontfile)
+            else:
+                name_width = fitz.get_text_length(name, fontsize=font_size, fontname=fontname)
             name_x = rect.x0 + (rect.width - name_width) / 2
             name_y = rect.y0 + rect.height / 2 + font_size / 2
             page.insert_text(
                 (name_x, name_y),
                 name,
                 fontsize=font_size,
-                color=name_color
+                color=name_color,
+                fontname=None if fontfile else fontname,
+                fontfile=fontfile
             )
     doc.save(output_path)
     doc.close()
+    if fontfile and os.path.exists(fontfile):
+        os.remove(fontfile)
 
 if uploaded_excel and uploaded_pdf:
     template_bytes = uploaded_pdf.read()  # Read once here
@@ -126,12 +208,14 @@ if uploaded_excel and uploaded_pdf:
         valid_df = df[df["Valid Name"] & df["Valid Email"]]
         os.makedirs("output", exist_ok=True)
         name_color = hex_to_rgb(name_color_hex)
+        # Remove debug print and preview
         for _, row in valid_df.iterrows():
             name = row["Name"]
             email = row["Email"]
             first_name = name.split()[0]
             cert_path = f"output/{name}.pdf"
-            generate_certificate(name, template_bytes, cert_path, name_color=name_color, font_size=font_size)
+            # Always use correct case for fontname
+            generate_certificate(name, template_bytes, cert_path, name_color=name_color, font_size=font_size, default_rect=default_rect, fontname=default_fontname, fontfile=fontfile)
             # Read and encode PDF
             with open(cert_path, "rb") as f:
                 data = f.read()
