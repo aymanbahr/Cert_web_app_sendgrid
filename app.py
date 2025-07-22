@@ -138,7 +138,7 @@ if template_bytes:
     rect_width = int(page_width * 0.6)
     x0_default = int((page_width - rect_width) / 2)
     x1_default = int(x0_default + rect_width)
-    y0_default = 820
+    y0_default = 850
     y1_default = y0_default + 60
     doc.close()
 else:
@@ -150,9 +150,9 @@ else:
 # Manual placement sliders with calculated defaults
 st.subheader("Manual Name Placement (if needed)")
 x0 = st.slider("X (left)", 0, 1200, x0_default)
-y0 = st.slider("Y (top)", 0, 800, y0_default)
+y0 = st.slider("Y (top)", 0, 8000, y0_default)
 x1 = st.slider("X (right)", 0, 1200, x1_default)
-y1 = st.slider("Y (bottom)", 0, 800, y1_default)
+y1 = st.slider("Y (bottom)", 0, 8000, y1_default)
 default_rect = (x0, y0, x1, y1)
 
 def hex_to_rgb(hex_color):
